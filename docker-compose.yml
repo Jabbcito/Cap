@@ -32,8 +32,11 @@ services:
       APPLE_CLIENT_SECRET: ${APPLE_CLIENT_SECRET:-}
       MEDIA_SERVER_URL: http://media-server:3456
       MEDIA_SERVER_WEBHOOK_URL: http://cap-web:3000
-    ports:
-      - "${CAP_PORT:-3000}:3000"
+    # Sin "ports:": en el VPS de destino solo el reverse proxy (Nginx Proxy
+    # Manager) publica puertos al host. Alcanza este contenedor por nombre
+    # a través de la red externa "proxy" (ver abajo).
+    expose:
+      - "3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
       interval: 30s
@@ -42,6 +45,7 @@ services:
       start_period: 60s
     networks:
       - cap-network
+      - proxy
 
   media-server:
     container_name: cap-media-server
@@ -94,9 +98,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-cap-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-cap-minio-pwd-456}
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    # Solo se expone la API S3 (9000) vía NPM en el VPS de destino. La
+    # consola de administración (9001) queda sin publicar a internet.
+    expose:
+      - "9000"
+      - "9001"
     volumes:
       - cap-minio-data:/data
     healthcheck:
@@ -107,6 +113,7 @@ services:
       start_period: 10s
     networks:
       - cap-network
+      - proxy
 
   minio-setup:
     container_name: cap-minio-setup
@@ -133,3 +140,8 @@ volumes:
 networks:
   cap-network:
     driver: bridge
+  # Red compartida del VPS de destino por donde Nginx Proxy Manager alcanza
+  # los contenedores. Debe existir de antemano en el servidor
+  # ("docker network create proxy" o ya creada por su infraestructura).
+  proxy:
+    external: true
